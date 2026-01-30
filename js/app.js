@@ -170,8 +170,8 @@ async function renderVisaoAnual({ slug }) {
     </div>
     
     <div class="month-tabs" style="margin-bottom:24px;">
-      <button class="month-tab ${state.abAtivaVisaoAnual === 'anual' ? 'active' : ''}" onclick="switchVisaoAnualTab('anual')">📅 Visão Anual</button>
-      <button class="month-tab ${state.abAtivaVisaoAnual === 'workflow' ? 'active' : ''}" onclick="switchVisaoAnualTab('workflow')">📋 Workflow</button>
+      <button class="month-tab ${state.abAtivaVisaoAnual === 'anual' ? 'active' : ''}" data-view="anual" onclick="switchVisaoAnualTab('anual')">📅 Visão Anual</button>
+      <button class="month-tab ${state.abAtivaVisaoAnual === 'workflow' ? 'active' : ''}" data-view="workflow" onclick="switchVisaoAnualTab('workflow')">📋 Workflow</button>
     </div>
 
     <div id="tab-visao-anual" class="tab-content" ${state.abAtivaVisaoAnual === 'anual' ? '' : 'style="display:none;"'}>
@@ -879,11 +879,10 @@ function escapeAttr(str) {
 function switchVisaoAnualTab(tab) {
   state.abAtivaVisaoAnual = tab;
   
-  // Atualiza botões
-  document.querySelectorAll('.month-tab').forEach(btn => {
-    btn.classList.remove('active');
+  // Atualiza botões - usa data-view pra distinguir das tabs de mês
+  document.querySelectorAll('.month-tab[data-view]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.view === tab);
   });
-  event.target.classList.add('active');
   
   // Atualiza conteúdo
   document.getElementById('tab-visao-anual').style.display = tab === 'anual' ? 'block' : 'none';
