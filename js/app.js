@@ -1147,84 +1147,327 @@ function findItemInKanbanData(id) {
 // MODAL ADICIONAR DEMANDA
 // ============================================
 
+// ============================================
+// CANAIS DE PUBLICAÇÃO
+// ============================================
+const CANAIS = [
+  { id: 'instagram', icon: '📷', label: 'Instagram', color: '#E4405F' },
+  { id: 'tiktok', icon: '🎵', label: 'TikTok', color: '#000000' },
+  { id: 'facebook', icon: '👤', label: 'Facebook', color: '#1877F2' },
+  { id: 'youtube', icon: '▶️', label: 'YouTube', color: '#FF0000' },
+  { id: 'twitter', icon: '𝕏', label: 'X / Twitter', color: '#1DA1F2' },
+  { id: 'linkedin', icon: '💼', label: 'LinkedIn', color: '#0A66C2' },
+  { id: 'pinterest', icon: '📌', label: 'Pinterest', color: '#E60023' },
+  { id: 'whatsapp', icon: '💬', label: 'WhatsApp', color: '#25D366' },
+  { id: 'telegram', icon: '✈️', label: 'Telegram', color: '#0088CC' },
+  { id: 'threads', icon: '🧵', label: 'Threads', color: '#000000' },
+  { id: 'stories', icon: '⏳', label: 'Stories', color: '#FF6B35' },
+  { id: 'blog', icon: '📝', label: 'Blog', color: '#7C3AED' },
+];
+
 function openAddDemandModal() {
   if (!state.empresaAtual) return;
-  
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay add-demand-modal';
-  overlay.id = 'add-demand-modal';
-  overlay.onclick = (e) => { if (e.target === overlay) closeModal(); };
 
   const hoje = new Date().toISOString().split('T')[0];
-  const mesAtual = new Date().getMonth() + 1;
-  const anoAtual = new Date().getFullYear();
+  const cores = state.empresaAtual.cores || {};
+  const primaria = cores.primaria || '#6366F1';
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay demand-fullpage-modal';
+  overlay.id = 'add-demand-modal';
 
   overlay.innerHTML = `
-    <div class="modal">
-      <div class="modal-header">
-        <h2>➕ Adicionar Demanda Rápida</h2>
-        <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="demand-page">
+      <div class="demand-page-header">
+        <div class="demand-page-title">
+          <span class="demand-icon" style="background:${primaria}">📋</span>
+          <div>
+            <h2>Nova Demanda</h2>
+            <p class="demand-subtitle">Preencha os campos para criar uma demanda — <strong>${escapeHtml(state.empresaAtual.nome)}</strong></p>
+          </div>
+        </div>
+        <button class="demand-close" onclick="closeModal()">✕</button>
       </div>
-      <div class="modal-body" style="padding-top:16px">
-        <form id="form-add-demand" onsubmit="salvarDemandaRapida(event)">
-          <div class="form-group">
-            <label>Título *</label>
-            <input type="text" class="form-control" name="titulo" required placeholder="Ex: Post sobre produtividade">
+
+      <form id="form-add-demand" class="demand-form" onsubmit="salvarDemandaCompleta(event)">
+        
+        <!-- 1. Título -->
+        <div class="demand-field">
+          <div class="demand-field-number">1</div>
+          <div class="demand-field-content">
+            <label class="demand-label">Título da demanda</label>
+            <input type="text" class="demand-input" name="titulo" required 
+              placeholder="Ex: Carrossel sobre benefícios do treino funcional">
           </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label>Tipo</label>
-              <select class="form-control" name="tipo">
-                ${TIPOS.map(t => `<option value="${t}">${TIPO_EMOJI[t] || '📄'} ${t}</option>`).join('')}
-              </select>
+        </div>
+
+        <!-- 2. Tipo de conteúdo -->
+        <div class="demand-field">
+          <div class="demand-field-number">2</div>
+          <div class="demand-field-content">
+            <label class="demand-label">Tipo de conteúdo</label>
+            <div class="demand-tipo-grid">
+              ${TIPOS.map(t => `
+                <button type="button" class="demand-tipo-btn" data-tipo="${t}" onclick="selectDemandTipo(this, '${t}')">
+                  <span class="demand-tipo-icon">${TIPO_EMOJI[t] || '📄'}</span>
+                  <span class="demand-tipo-name">${t}</span>
+                </button>
+              `).join('')}
             </div>
-            <div class="form-group">
-              <label>Data de Publicação</label>
-              <input type="date" class="form-control" name="data_publicacao" value="${hoje}">
+            <input type="hidden" name="tipo" value="carrossel">
+          </div>
+        </div>
+
+        <!-- 3. Canais de publicação -->
+        <div class="demand-field">
+          <div class="demand-field-number">3</div>
+          <div class="demand-field-content">
+            <label class="demand-label">Em quais canais será publicado?</label>
+            <div class="demand-canais-grid">
+              ${CANAIS.map(c => `
+                <button type="button" class="demand-canal-btn" data-canal="${c.id}" 
+                  onclick="toggleDemandCanal(this)" title="${c.label}">
+                  <span class="demand-canal-icon">${c.icon}</span>
+                </button>
+              `).join('')}
+            </div>
+            <input type="hidden" name="canais" value="">
+          </div>
+        </div>
+
+        <!-- 4. Data prevista -->
+        <div class="demand-field">
+          <div class="demand-field-number">4</div>
+          <div class="demand-field-content">
+            <label class="demand-label">Data prevista para publicação</label>
+            <div class="demand-date-row">
+              <input type="date" class="demand-input demand-input-date" name="data_publicacao" value="${hoje}">
+              <input type="time" class="demand-input demand-input-time" name="hora_publicacao" value="10:00">
             </div>
           </div>
-          <div class="form-group">
-            <label>Descrição (opcional)</label>
-            <textarea class="form-control" name="descricao" placeholder="Descreva a demanda..." rows="3"></textarea>
+        </div>
+
+        <!-- 5. Agendamento automático -->
+        <div class="demand-field">
+          <div class="demand-field-number">5</div>
+          <div class="demand-field-content">
+            <label class="demand-label">Agendamento automático</label>
+            <label class="demand-toggle">
+              <input type="checkbox" name="agendamento_auto">
+              <span class="demand-toggle-slider"></span>
+              <span class="demand-toggle-text">Demanda será agendada automaticamente após aprovação</span>
+            </label>
           </div>
-          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
-            <button type="button" class="btn" onclick="closeModal()">Cancelar</button>
-            <button type="submit" class="btn btn-primary">💾 Criar Demanda</button>
+        </div>
+
+        <!-- 6. Tags -->
+        <div class="demand-field">
+          <div class="demand-field-number">6</div>
+          <div class="demand-field-content">
+            <label class="demand-label">Tags</label>
+            <input type="text" class="demand-input" name="tags" 
+              placeholder="Ex: fitness, treino, motivação (separe por vírgula)">
           </div>
-        </form>
-      </div>
+        </div>
+
+        <!-- 7. Briefing -->
+        <div class="demand-field">
+          <div class="demand-field-number">7</div>
+          <div class="demand-field-content">
+            <label class="demand-label">Briefing</label>
+            <div class="demand-editor-toolbar">
+              <button type="button" onclick="execBriefingCmd('bold')" title="Negrito"><strong>B</strong></button>
+              <button type="button" onclick="execBriefingCmd('italic')" title="Itálico"><em>I</em></button>
+              <button type="button" onclick="execBriefingCmd('underline')" title="Sublinhado"><u>U</u></button>
+              <button type="button" onclick="execBriefingCmd('strikeThrough')" title="Tachado"><s>S</s></button>
+              <span class="demand-editor-sep"></span>
+              <button type="button" onclick="execBriefingCmd('insertUnorderedList')" title="Lista">☰</button>
+              <button type="button" onclick="execBriefingCmd('insertOrderedList')" title="Lista numerada">1.</button>
+              <span class="demand-editor-sep"></span>
+              <button type="button" onclick="execBriefingCmd('createLink', prompt('URL:'))" title="Link">🔗</button>
+            </div>
+            <div class="demand-editor" id="briefing-editor" contenteditable="true" 
+              data-placeholder="Descreva o briefing da demanda, referências, tom de voz..."></div>
+          </div>
+        </div>
+
+        <!-- Upload de arquivo -->
+        <div class="demand-upload-zone" id="demand-upload-zone"
+          onclick="document.getElementById('demand-file-input').click()">
+          <div class="demand-upload-icon">☁️</div>
+          <div class="demand-upload-text">
+            <strong>Selecione um arquivo ou arraste aqui.</strong>
+            <span>Formatos: PNG, JPG, GIF, PDF, DOCX — até 50MB</span>
+          </div>
+          <button type="button" class="demand-upload-btn">Selecionar arquivo</button>
+          <input type="file" id="demand-file-input" name="arquivo" hidden 
+            accept=".png,.jpg,.jpeg,.gif,.pdf,.docx"
+            onchange="handleDemandFileSelect(this)">
+        </div>
+        <div id="demand-file-preview" class="demand-file-preview" style="display:none;"></div>
+
+        <!-- Botões -->
+        <div class="demand-actions">
+          <button type="button" class="demand-btn-back" onclick="closeModal()">← Voltar</button>
+          <div class="demand-actions-right">
+            <button type="button" class="demand-btn-draft" onclick="salvarDemandaCompleta(event, true)">
+              💾 Salvar como rascunho
+            </button>
+            <button type="submit" class="demand-btn-submit">
+              Avançar →
+            </button>
+          </div>
+        </div>
+
+      </form>
     </div>
   `;
 
   document.body.appendChild(overlay);
-  requestAnimationFrame(() => overlay.classList.add('active'));
+  requestAnimationFrame(() => {
+    overlay.classList.add('active');
+    // Selecionar primeiro tipo por padrão
+    const firstTipo = overlay.querySelector('.demand-tipo-btn');
+    if (firstTipo) firstTipo.classList.add('selected');
+  });
   overlay.querySelector('input[name="titulo"]').focus();
+
+  // Drag and drop no upload zone
+  const uploadZone = overlay.querySelector('#demand-upload-zone');
+  uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+  uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+  uploadZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadZone.classList.remove('dragover');
+    if (e.dataTransfer.files.length) {
+      document.getElementById('demand-file-input').files = e.dataTransfer.files;
+      handleDemandFileSelect(document.getElementById('demand-file-input'));
+    }
+  });
 }
 
-async function salvarDemandaRapida(event) {
-  event.preventDefault();
-  const form = event.target;
-  const formData = new FormData(form);
+// Seleção de tipo de conteúdo
+function selectDemandTipo(btn, tipo) {
+  document.querySelectorAll('.demand-tipo-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  document.querySelector('input[name="tipo"]').value = tipo;
+}
 
+// Toggle canal de publicação
+function toggleDemandCanal(btn) {
+  btn.classList.toggle('selected');
+  const canaisSelecionados = Array.from(document.querySelectorAll('.demand-canal-btn.selected'))
+    .map(b => b.dataset.canal);
+  document.querySelector('input[name="canais"]').value = canaisSelecionados.join(',');
+}
+
+// Comandos do editor de briefing
+function execBriefingCmd(cmd, value) {
+  document.execCommand(cmd, false, value || null);
+  document.getElementById('briefing-editor').focus();
+}
+
+// Upload de arquivo
+function handleDemandFileSelect(input) {
+  const file = input.files[0];
+  if (!file) return;
+  
+  const preview = document.getElementById('demand-file-preview');
+  const zone = document.getElementById('demand-upload-zone');
+  
+  if (file.type.startsWith('image/')) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      preview.innerHTML = `
+        <div class="demand-file-card">
+          <img src="${e.target.result}" alt="${file.name}" class="demand-file-img">
+          <div class="demand-file-info">
+            <strong>${file.name}</strong>
+            <span>${(file.size / 1024 / 1024).toFixed(2)} MB</span>
+          </div>
+          <button type="button" class="demand-file-remove" onclick="removeDemandFile()">✕</button>
+        </div>
+      `;
+      preview.style.display = 'block';
+      zone.style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+  } else {
+    preview.innerHTML = `
+      <div class="demand-file-card">
+        <div class="demand-file-icon">📄</div>
+        <div class="demand-file-info">
+          <strong>${file.name}</strong>
+          <span>${(file.size / 1024 / 1024).toFixed(2)} MB</span>
+        </div>
+        <button type="button" class="demand-file-remove" onclick="removeDemandFile()">✕</button>
+      </div>
+    `;
+    preview.style.display = 'block';
+    zone.style.display = 'none';
+  }
+}
+
+function removeDemandFile() {
+  document.getElementById('demand-file-input').value = '';
+  document.getElementById('demand-file-preview').style.display = 'none';
+  document.getElementById('demand-upload-zone').style.display = 'flex';
+}
+
+// Salvar demanda completa
+async function salvarDemandaCompleta(event, asDraft) {
+  if (event) event.preventDefault();
   if (!state.empresaAtual) return;
+
+  const form = document.getElementById('form-add-demand');
+  const formData = new FormData(form);
+  const briefingEl = document.getElementById('briefing-editor');
+
+  const titulo = formData.get('titulo');
+  if (!titulo?.trim()) {
+    showToast('Preencha o título da demanda', 'error');
+    return;
+  }
+
+  const dataStr = formData.get('data_publicacao');
+  const dataPub = dataStr ? new Date(dataStr) : new Date();
+  const mes = dataPub.getMonth() + 1;
+  const ano = dataPub.getFullYear();
 
   const dados = {
     empresaId: state.empresaAtual.id,
-    titulo: formData.get('titulo'),
-    tipo: formData.get('tipo'),
-    descricao: formData.get('descricao') || null,
-    dataPublicacao: formData.get('data_publicacao') || null,
-    mes: state.filtroMes !== 'todos' ? parseInt(state.filtroMes) : new Date().getMonth() + 1,
-    ano: state.anoAtual,
+    titulo: titulo.trim(),
+    tipo: formData.get('tipo') || 'carrossel',
+    descricao: briefingEl ? briefingEl.innerHTML : (formData.get('descricao') || ''),
+    dataPublicacao: dataStr || null,
+    mes: mes,
+    ano: ano,
     ordem: 999
   };
+
+  // Metadata extra (canais, tags, hora, agendamento)
+  const canais = formData.get('canais');
+  const tags = formData.get('tags');
+  const hora = formData.get('hora_publicacao');
+  const autoSchedule = formData.get('agendamento_auto');
+
+  // Salvar metadata como badge (temporário até ter campos próprios)
+  const badges = [];
+  if (canais) badges.push(canais);
+  if (tags) badges.push(tags);
+  if (hora) badges.push(`🕐 ${hora}`);
+  dados.badge = badges.join(' | ');
+
+  // Status: rascunho se salvar como draft, senão conteudo (avançar)
+  dados.status = asDraft ? 'rascunho' : 'conteudo';
 
   const result = await createConteudoRapido(dados);
   if (result) {
     closeModal();
-    // Atualizar kanban
-    if (!state.kanbanData.rascunho) state.kanbanData.rascunho = [];
-    state.kanbanData.rascunho.push(result);
+    const targetStatus = asDraft ? 'rascunho' : 'conteudo';
+    if (!state.kanbanData[targetStatus]) state.kanbanData[targetStatus] = [];
+    state.kanbanData[targetStatus].push(result);
     renderWorkflow();
+    showToast(asDraft ? 'Demanda salva como rascunho!' : 'Demanda criada e avançada para Conteúdo!', 'success');
   }
 }
