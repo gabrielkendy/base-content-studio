@@ -433,25 +433,42 @@ async function openPostDetail(id) {
     ? `<div class="content-block"><button class="copy-btn" onclick="copyToClipboard(document.getElementById('legenda-text').innerText)">📋 Copiar</button><pre id="legenda-text">${escapeHtml(post.legenda)}</pre></div>`
     : '<p style="color:var(--text-muted)">Nenhuma legenda definida</p>';
 
-  const midiaHtml = midiaUrls.length > 0
-    ? `<div class="media-grid">${midiaUrls.map(url => `
-        <div class="media-item">
-          <img src="${url}" alt="Mídia" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%2250%25%22 x=%2250%25%22 text-anchor=%22middle%22 dominant-baseline=%22middle%22 font-size=%2230%22>📎</text></svg>'">
-          <div class="media-item-overlay">
-            <a href="${url}" target="_blank" class="btn btn-sm" style="background:white;color:black;">⬇ Abrir</a>
-          </div>
+  const midiaItemsHtml = midiaUrls.map((url, i) => {
+    const isVideo = /\.(mp4|mov|webm|avi)/i.test(url) || url.includes('video');
+    return `<div class="media-item">
+      ${isVideo 
+        ? `<video src="${url}" style="width:100%;height:100%;object-fit:cover;" muted></video>`
+        : `<img src="${url}" alt="Mídia" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%2250%25%22 x=%2250%25%22 text-anchor=%22middle%22 dominant-baseline=%22middle%22 font-size=%2230%22>📎</text></svg>'">`
+      }
+      <div class="media-item-overlay">
+        <a href="${url}" target="_blank" class="btn btn-sm" style="background:white;color:black;">⬇ Abrir</a>
+        <button class="btn btn-sm" onclick="removeMedia('${id}', ${i})" style="background:#EF4444;color:white;margin-top:4px;">🗑️</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  const midiaHtml = `
+    <div class="media-upload-area" id="media-upload-area"
+      ondragover="event.preventDefault(); this.classList.add('dragover')"
+      ondragleave="this.classList.remove('dragover')"
+      ondrop="handleMediaDrop(event, '${id}')">
+      ${midiaUrls.length > 0 ? `<div class="media-grid">${midiaItemsHtml}</div>` : ''}
+      <div class="media-upload-zone" onclick="document.getElementById('media-file-input').click()">
+        <input type="file" id="media-file-input" hidden multiple accept="image/*,video/*"
+          onchange="handleMediaUpload(this.files, '${id}')">
+        <div style="text-align:center;padding:20px;">
+          <div style="font-size:32px;margin-bottom:8px;">📎</div>
+          <strong>Clique ou arraste arquivos aqui</strong>
+          <p style="color:var(--text-muted);font-size:13px;margin-top:4px;">Imagens e vídeos • JPG, PNG, MP4, MOV</p>
         </div>
-      `).join('')}
-      <button class="add-media-btn" onclick="addMediaUrl('${id}')">
-        <span style="font-size:24px">+</span>
-        Adicionar mídia
-      </button>
-      </div>`
-    : `<div class="empty-state" style="padding:24px">
-        <div class="empty-state-icon">📎</div>
-        <h3>Nenhuma mídia</h3>
-        <button class="btn btn-sm" onclick="addMediaUrl('${id}')" style="margin-top:8px">+ Adicionar URL de mídia</button>
-      </div>`;
+      </div>
+      <div id="media-upload-progress" style="display:none;padding:12px;">
+        <div style="background:var(--surface-2);border-radius:8px;overflow:hidden;height:6px;">
+          <div id="media-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s;"></div>
+        </div>
+        <p id="media-progress-text" style="color:var(--text-muted);font-size:12px;margin-top:4px;text-align:center;">Enviando...</p>
+      </div>
+    </div>`;
 
   // Monta o modal
   const overlay = document.createElement('div');
@@ -550,21 +567,62 @@ async function confirmarExclusao(id) {
   }
 }
 
-async function addMediaUrl(id) {
-  const url = prompt('Cole a URL da imagem/vídeo:');
-  if (!url) return;
+async function handleMediaUpload(files, conteudoId) {
+  if (!files || !files.length) return;
   
-  const post = await getConteudoById(id);
-  if (!post) return;
+  const progressDiv = document.getElementById('media-upload-progress');
+  const progressBar = document.getElementById('media-progress-bar');
+  const progressText = document.getElementById('media-progress-text');
+  if (progressDiv) progressDiv.style.display = 'block';
+
+  const slug = state.empresaAtual?.slug || 'geral';
+  const total = files.length;
+  let uploaded = 0;
+
+  for (const file of files) {
+    if (progressText) progressText.textContent = `Enviando ${uploaded + 1}/${total}: ${file.name}...`;
+    if (progressBar) progressBar.style.width = `${(uploaded / total) * 100}%`;
+
+    try {
+      const url = await uploadMedia(file, slug, conteudoId);
+      if (url) {
+        await addMediaToPost(conteudoId, url);
+        uploaded++;
+      }
+    } catch (err) {
+      console.error('Erro upload:', err);
+      showToast(`Erro ao enviar ${file.name}`, 'error');
+    }
+  }
+
+  if (progressBar) progressBar.style.width = '100%';
+  if (progressText) progressText.textContent = `✅ ${uploaded} arquivo(s) enviado(s)!`;
   
-  const midiaUrls = post.midia_urls || [];
-  midiaUrls.push(url);
+  showToast(`${uploaded} mídia(s) adicionada(s)!`, 'success');
   
-  const result = await atualizarConteudo(id, { midia_urls: midiaUrls });
-  if (result) {
-    showToast('Mídia adicionada!', 'success');
+  setTimeout(() => {
     closeModal();
-    openPostDetail(id);
+    openPostDetail(conteudoId);
+  }, 500);
+}
+
+function handleMediaDrop(event, conteudoId) {
+  event.preventDefault();
+  const area = document.getElementById('media-upload-area');
+  if (area) area.classList.remove('dragover');
+  
+  if (event.dataTransfer.files.length) {
+    handleMediaUpload(event.dataTransfer.files, conteudoId);
+  }
+}
+
+async function removeMedia(conteudoId, index) {
+  if (!confirm('Remover esta mídia?')) return;
+  const result = await removeMediaFromPost(conteudoId, index);
+  if (result) {
+    showToast('Mídia removida', 'success');
+    closeModal();
+    openPostDetail(conteudoId);
   }
 }
 

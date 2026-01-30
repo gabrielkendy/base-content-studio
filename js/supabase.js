@@ -385,6 +385,63 @@ function getBaseUrl() {
   return `${loc.protocol}//${loc.host}${loc.pathname.replace(/\/[^/]*$/, '')}`;
 }
 
+// ============================================
+// UPLOAD DE MÍDIA (Supabase Storage)
+// ============================================
+
+async function uploadMedia(file, empresaSlug, conteudoId) {
+  try {
+    const ext = file.name.split('.').pop();
+    const fileName = `${Date.now()}_${Math.random().toString(36).substr(2, 6)}.${ext}`;
+    const filePath = `${empresaSlug}/${conteudoId}/${fileName}`;
+
+    const { data, error } = await db.storage
+      .from('midias')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false
+      });
+
+    if (error) throw error;
+
+    // Pegar URL pública
+    const { data: urlData } = db.storage
+      .from('midias')
+      .getPublicUrl(filePath);
+
+    return urlData.publicUrl;
+  } catch (err) {
+    console.error('Erro no upload:', err);
+    // Fallback: converter pra base64 data URL e salvar inline
+    return await fileToDataUrl(file);
+  }
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function addMediaToPost(conteudoId, url) {
+  const post = await getConteudoById(conteudoId);
+  if (!post) return null;
+  const midiaUrls = post.midia_urls || [];
+  midiaUrls.push(url);
+  return await atualizarConteudo(conteudoId, { midia_urls: midiaUrls });
+}
+
+async function removeMediaFromPost(conteudoId, index) {
+  const post = await getConteudoById(conteudoId);
+  if (!post) return null;
+  const midiaUrls = post.midia_urls || [];
+  midiaUrls.splice(index, 1);
+  return await atualizarConteudo(conteudoId, { midia_urls: midiaUrls });
+}
+
 // Copiar para clipboard
 async function copyToClipboard(text) {
   try {

@@ -984,6 +984,34 @@ select.form-control {
   color: var(--accent);
 }
 
+/* Upload de Mídia */
+.media-upload-area {
+  border-radius: var(--radius);
+}
+
+.media-upload-area.dragover {
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.media-upload-zone {
+  border: 2px dashed var(--border-color);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: var(--transition);
+  margin-top: 12px;
+}
+
+.media-upload-zone:hover,
+.media-upload-area.dragover .media-upload-zone {
+  border-color: var(--accent);
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.media-item-overlay {
+  flex-direction: column;
+  gap: 4px;
+}
+
 /* === Aprovação Page === */
 .aprovacao-container {
   max-width: 700px;
