@@ -6,7 +6,7 @@ const SUPABASE_URL = 'https://gpqxqykgcrpmvwxktjvp.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdwcXhxeWtnY3JwbXZ3eGt0anZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcxNjMxNTMsImV4cCI6MjA4MjczOTE1M30.v1WbmTecfEEW7g_-NI1uYP0sxIZxquv3rZPQ83a-nKI';
 
 // Inicializa o cliente Supabase
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ============================================
 // EMPRESAS
@@ -14,8 +14,7 @@ const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 async function getEmpresas() {
   try {
-    const { data, error } = await supabase
-      .from('empresas')
+    const { data, error } = await db.from('empresas')
       .select('*')
       .order('nome');
     if (error) throw error;
@@ -29,8 +28,7 @@ async function getEmpresas() {
 
 async function getEmpresaBySlug(slug) {
   try {
-    const { data, error } = await supabase
-      .from('empresas')
+    const { data, error } = await db.from('empresas')
       .select('*')
       .eq('slug', slug)
       .single();
@@ -49,8 +47,7 @@ async function getEmpresaBySlug(slug) {
 
 async function getConteudos(empresaId, mes = null, ano = null) {
   try {
-    let query = supabase
-      .from('planejamento_conteudos')
+    let query = db.from('planejamento_conteudos')
       .select('*')
       .eq('empresa_id', empresaId)
       .order('ordem', { ascending: true })
@@ -71,8 +68,7 @@ async function getConteudos(empresaId, mes = null, ano = null) {
 
 async function getConteudoById(id) {
   try {
-    const { data, error } = await supabase
-      .from('planejamento_conteudos')
+    const { data, error } = await db.from('planejamento_conteudos')
       .select('*')
       .eq('id', id)
       .single();
@@ -87,8 +83,7 @@ async function getConteudoById(id) {
 
 async function criarConteudo(conteudo) {
   try {
-    const { data, error } = await supabase
-      .from('planejamento_conteudos')
+    const { data, error } = await db.from('planejamento_conteudos')
       .insert([conteudo])
       .select()
       .single();
@@ -104,8 +99,7 @@ async function criarConteudo(conteudo) {
 
 async function atualizarConteudo(id, updates) {
   try {
-    const { data, error } = await supabase
-      .from('planejamento_conteudos')
+    const { data, error } = await db.from('planejamento_conteudos')
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq('id', id)
       .select()
@@ -121,8 +115,7 @@ async function atualizarConteudo(id, updates) {
 
 async function deletarConteudo(id) {
   try {
-    const { error } = await supabase
-      .from('planejamento_conteudos')
+    const { error } = await db.from('planejamento_conteudos')
       .delete()
       .eq('id', id);
     if (error) throw error;
@@ -138,8 +131,7 @@ async function deletarConteudo(id) {
 // Contagem de conteúdos por empresa
 async function getConteudoCount(empresaId) {
   try {
-    const { count, error } = await supabase
-      .from('planejamento_conteudos')
+    const { count, error } = await db.from('planejamento_conteudos')
       .select('*', { count: 'exact', head: true })
       .eq('empresa_id', empresaId);
     if (error) throw error;
@@ -165,8 +157,7 @@ function gerarToken() {
 async function criarLinkAprovacao(conteudoId, empresaId) {
   try {
     const token = gerarToken();
-    const { data, error } = await supabase
-      .from('aprovacoes_links')
+    const { data, error } = await db.from('aprovacoes_links')
       .insert([{
         conteudo_id: conteudoId,
         empresa_id: empresaId,
@@ -187,8 +178,7 @@ async function criarLinkAprovacao(conteudoId, empresaId) {
 
 async function getAprovacaoByToken(token) {
   try {
-    const { data, error } = await supabase
-      .from('aprovacoes_links')
+    const { data, error } = await db.from('aprovacoes_links')
       .select('*, planejamento_conteudos(*), empresas(*)')
       .eq('token', token)
       .single();
@@ -210,8 +200,7 @@ async function responderAprovacao(token, status, comentario = '', clienteNome = 
     if (status === 'aprovado') {
       updates.aprovado_em = new Date().toISOString();
     }
-    const { data, error } = await supabase
-      .from('aprovacoes_links')
+    const { data, error } = await db.from('aprovacoes_links')
       .update(updates)
       .eq('token', token)
       .select()
