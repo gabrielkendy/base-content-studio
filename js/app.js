@@ -454,12 +454,14 @@ async function openPostDetail(id) {
       ondrop="handleMediaDrop(event, '${id}')">
       ${midiaUrls.length > 0 ? `<div class="media-grid">${midiaItemsHtml}</div>` : ''}
       <div class="media-upload-zone" onclick="document.getElementById('media-file-input').click()">
-        <input type="file" id="media-file-input" hidden multiple accept="image/*,video/*"
+        <input type="file" id="media-file-input" hidden multiple accept="image/*,video/*,.mp4,.mov,.webm,.avi"
           onchange="handleMediaUpload(this.files, '${id}')">
         <div style="text-align:center;padding:20px;">
           <div style="font-size:32px;margin-bottom:8px;">📎</div>
           <strong>Clique ou arraste arquivos aqui</strong>
-          <p style="color:var(--text-muted);font-size:13px;margin-top:4px;">Imagens e vídeos • JPG, PNG, MP4, MOV</p>
+          <p style="color:var(--text-muted);font-size:13px;margin-top:4px;">Até 10 arquivos • Fotos (20MB) e Vídeos (500MB)</p>
+          <p style="color:var(--text-muted);font-size:12px;">JPG, PNG, GIF, WEBP, MP4, MOV, WEBM</p>
+          <p style="color:var(--accent);font-size:12px;margin-top:4px;">${midiaUrls.length}/${10} mídias</p>
         </div>
       </div>
       <div id="media-upload-progress" style="display:none;padding:12px;">
@@ -569,18 +571,63 @@ async function confirmarExclusao(id) {
 
 async function handleMediaUpload(files, conteudoId) {
   if (!files || !files.length) return;
-  
+
+  // Checar quantas mídias já tem
+  const post = await getConteudoById(conteudoId);
+  const existentes = (post?.midia_urls || []).length;
+  const MAX_MIDIAS = 10;
+  const disponivel = MAX_MIDIAS - existentes;
+
+  if (disponivel <= 0) {
+    showToast(`Limite de ${MAX_MIDIAS} mídias atingido! Remova alguma antes.`, 'error');
+    return;
+  }
+
+  // Limitar quantidade
+  let fileList = Array.from(files);
+  if (fileList.length > disponivel) {
+    showToast(`Só é possível adicionar mais ${disponivel} mídia(s). Selecionando as primeiras ${disponivel}.`, 'info');
+    fileList = fileList.slice(0, disponivel);
+  }
+
+  // Validar tipos aceitos
+  const tiposAceitos = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
+    'video/mp4', 'video/quicktime', 'video/webm', 'video/avi', 'video/x-msvideo', 'video/mov'];
+  const MAX_IMAGE_SIZE = 20 * 1024 * 1024;  // 20MB por imagem
+  const MAX_VIDEO_SIZE = 500 * 1024 * 1024; // 500MB por vídeo
+
+  const validFiles = [];
+  for (const file of fileList) {
+    const isVideo = file.type.startsWith('video/');
+    const maxSize = isVideo ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE;
+
+    if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+      showToast(`${file.name}: tipo não suportado (${file.type || 'desconhecido'})`, 'error');
+      continue;
+    }
+    if (file.size > maxSize) {
+      const maxMB = Math.round(maxSize / (1024 * 1024));
+      showToast(`${file.name}: arquivo muito grande (max ${maxMB}MB)`, 'error');
+      continue;
+    }
+    validFiles.push(file);
+  }
+
+  if (!validFiles.length) return;
+
   const progressDiv = document.getElementById('media-upload-progress');
   const progressBar = document.getElementById('media-progress-bar');
   const progressText = document.getElementById('media-progress-text');
   if (progressDiv) progressDiv.style.display = 'block';
 
   const slug = state.empresaAtual?.slug || 'geral';
-  const total = files.length;
+  const total = validFiles.length;
   let uploaded = 0;
 
-  for (const file of files) {
-    if (progressText) progressText.textContent = `Enviando ${uploaded + 1}/${total}: ${file.name}...`;
+  for (const file of validFiles) {
+    const isVideo = file.type.startsWith('video/');
+    const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+    if (progressText) progressText.textContent = `Enviando ${uploaded + 1}/${total}: ${file.name} (${sizeMB}MB)...`;
     if (progressBar) progressBar.style.width = `${(uploaded / total) * 100}%`;
 
     try {
@@ -598,7 +645,7 @@ async function handleMediaUpload(files, conteudoId) {
   if (progressBar) progressBar.style.width = '100%';
   if (progressText) progressText.textContent = `✅ ${uploaded} arquivo(s) enviado(s)!`;
   
-  showToast(`${uploaded} mídia(s) adicionada(s)!`, 'success');
+  showToast(`${uploaded} mídia(s) adicionada(s)! (${existentes + uploaded}/${MAX_MIDIAS})`, 'success');
   
   setTimeout(() => {
     closeModal();
