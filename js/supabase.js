@@ -142,6 +142,91 @@ async function getConteudoCount(empresaId) {
 }
 
 // ============================================
+// WORKFLOW KANBAN - NOVAS FUNÇÕES
+// ============================================
+
+async function getConteudosByStatus(empresaId) {
+  try {
+    const { data, error } = await db.from('planejamento_conteudos')
+      .select('*')
+      .eq('empresa_id', empresaId)
+      .order('ordem', { ascending: true })
+      .order('data_publicacao', { ascending: true });
+    if (error) throw error;
+    
+    // Agrupa por status
+    const porStatus = {};
+    ['rascunho', 'conteudo', 'aprovacao_cliente', 'ajustes', 'aguardando', 'aprovado_agendado', 'concluido'].forEach(status => {
+      porStatus[status] = [];
+    });
+    
+    (data || []).forEach(item => {
+      const status = item.status || 'rascunho';
+      if (porStatus[status]) {
+        porStatus[status].push(item);
+      } else {
+        porStatus['rascunho'].push(item);
+      }
+    });
+    
+    return porStatus;
+  } catch (err) {
+    console.error('Erro ao buscar conteúdos por status:', err);
+    showToast('Erro ao carregar conteúdos', 'error');
+    return {};
+  }
+}
+
+async function updateConteudoStatus(id, status) {
+  try {
+    const { data, error } = await db.from('planejamento_conteudos')
+      .update({ status: status, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    showToast(`Status atualizado para ${status}`, 'success');
+    return data;
+  } catch (err) {
+    console.error('Erro ao atualizar status:', err);
+    showToast('Erro ao atualizar status', 'error');
+    return null;
+  }
+}
+
+async function createConteudoRapido(dados) {
+  try {
+    const conteudo = {
+      empresa_id: dados.empresaId,
+      titulo: dados.titulo || 'Nova demanda',
+      tipo: dados.tipo || 'carrossel',
+      status: 'rascunho',
+      descricao: dados.descricao || null,
+      data_publicacao: dados.dataPublicacao || null,
+      mes: dados.mes || new Date().getMonth() + 1,
+      ano: dados.ano || new Date().getFullYear(),
+      ordem: dados.ordem || 999,
+      slides: [],
+      prompts_imagem: [],
+      prompts_video: [],
+      midia_urls: []
+    };
+    
+    const { data, error } = await db.from('planejamento_conteudos')
+      .insert([conteudo])
+      .select()
+      .single();
+    if (error) throw error;
+    showToast('Demanda criada com sucesso!', 'success');
+    return data;
+  } catch (err) {
+    console.error('Erro ao criar conteúdo rápido:', err);
+    showToast('Erro ao criar demanda', 'error');
+    return null;
+  }
+}
+
+// ============================================
 // APROVAÇÕES
 // ============================================
 
@@ -250,13 +335,34 @@ const MESES = [
 ];
 
 const STATUS_CONFIG = {
+  // Status antigos para retrocompatibilidade
   ideia: { emoji: '💡', label: 'Ideia', color: '#666666' },
   planejado: { emoji: '📋', label: 'Planejado', color: '#3B82F6' },
   produzindo: { emoji: '🔨', label: 'Produzindo', color: '#F59E0B' },
   pronto: { emoji: '✅', label: 'Pronto', color: '#10B981' },
   enviado: { emoji: '📤', label: 'Enviado', color: '#8B5CF6' },
-  aprovado: { emoji: '👍', label: 'Aprovado', color: '#D4A017' }
+  aprovado: { emoji: '👍', label: 'Aprovado', color: '#D4A017' },
+  
+  // Novos status do workflow Kanban
+  rascunho: { emoji: '📝', label: 'Rascunho', color: '#6B7280' },
+  conteudo: { emoji: '🎨', label: 'Conteúdo', color: '#10B981' },
+  aprovacao_cliente: { emoji: '👁️', label: 'Aprovação do cliente', color: '#F59E0B' },
+  ajustes: { emoji: '🔧', label: 'Ajustes', color: '#EAB308' },
+  aguardando: { emoji: '⏳', label: 'Aguardando', color: '#F97316' },
+  aprovado_agendado: { emoji: '✅', label: 'Aprovado e agendado', color: '#3B82F6' },
+  concluido: { emoji: '✔️', label: 'Concluídos', color: '#22C55E' }
 };
+
+// Configuração específica para o Kanban
+const KANBAN_CONFIG = [
+  { key: 'rascunho', emoji: '📝', label: 'Rascunho', color: '#6B7280' },
+  { key: 'conteudo', emoji: '🎨', label: 'Conteúdo', color: '#10B981' },
+  { key: 'aprovacao_cliente', emoji: '👁️', label: 'Aprovação do cliente', color: '#F59E0B' },
+  { key: 'ajustes', emoji: '🔧', label: 'Ajustes', color: '#EAB308' },
+  { key: 'aguardando', emoji: '⏳', label: 'Aguardando', color: '#F97316' },
+  { key: 'aprovado_agendado', emoji: '✅', label: 'Aprovado e agendado', color: '#3B82F6' },
+  { key: 'concluido', emoji: '✔️', label: 'Concluídos', color: '#22C55E' }
+];
 
 const TIPOS = ['carrossel', 'reels', 'stories', 'estático', 'vídeo'];
 

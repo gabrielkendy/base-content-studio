@@ -10,7 +10,11 @@ let state = {
   conteudoAtual: null,
   mesAtual: null,
   anoAtual: new Date().getFullYear(),
-  tabAtiva: 'planejamento'
+  tabAtiva: 'planejamento',
+  abAtivaVisaoAnual: 'anual',  // 'anual' ou 'workflow'
+  kanbanData: {},
+  filtroMes: 'todos',
+  filtroStatus: 'todos'
 };
 
 // Debounce para edição inline
@@ -164,55 +168,74 @@ async function renderVisaoAnual({ slug }) {
         </div>
       </div>
     </div>
-    <div class="months-grid" id="months-grid"></div>
+    
+    <div class="month-tabs" style="margin-bottom:24px;">
+      <button class="month-tab ${state.abAtivaVisaoAnual === 'anual' ? 'active' : ''}" onclick="switchVisaoAnualTab('anual')">📅 Visão Anual</button>
+      <button class="month-tab ${state.abAtivaVisaoAnual === 'workflow' ? 'active' : ''}" onclick="switchVisaoAnualTab('workflow')">📋 Workflow</button>
+    </div>
+
+    <div id="tab-visao-anual" class="tab-content" ${state.abAtivaVisaoAnual === 'anual' ? '' : 'style="display:none;"'}>
+      <div class="months-grid" id="months-grid"></div>
+    </div>
+    
+    <div id="tab-workflow" class="tab-content" ${state.abAtivaVisaoAnual === 'workflow' ? '' : 'style="display:none;"'}>
+      <div id="workflow-container"></div>
+    </div>
   `;
 
+  // Popular visão anual (grid de meses)
   const grid = document.getElementById('months-grid');
-  
-  for (let m = 1; m <= 12; m++) {
-    const posts = porMes[m];
-    const total = posts.length;
-    
-    // Contagem por status
-    const statusCounts = {};
-    posts.forEach(p => {
-      const s = p.status || 'ideia';
-      statusCounts[s] = (statusCounts[s] || 0) + 1;
-    });
-
-    const card = document.createElement('div');
-    card.className = 'month-card';
-    card.onclick = () => router.navigate(`/cliente/${slug}/mes/${m}`);
-
-    // Barra de progresso
-    let progressHtml = '';
-    if (total > 0) {
-      const segments = Object.entries(STATUS_CONFIG).map(([status, cfg]) => {
-        const count = statusCounts[status] || 0;
-        if (count === 0) return '';
-        const pct = (count / total * 100).toFixed(1);
-        return `<div class="progress-segment" style="width:${pct}%;background:${cfg.color}" title="${cfg.label}: ${count}"></div>`;
-      }).join('');
+  if (grid) {
+    for (let m = 1; m <= 12; m++) {
+      const posts = porMes[m];
+      const total = posts.length;
       
-      progressHtml = `
-        <div class="progress-bar">${segments}</div>
-        <div class="progress-legend">
-          ${Object.entries(statusCounts).map(([s, c]) => {
-            const cfg = STATUS_CONFIG[s] || STATUS_CONFIG.ideia;
-            return `<span class="progress-legend-item"><span class="progress-legend-dot" style="background:${cfg.color}"></span>${c}</span>`;
-          }).join('')}
-        </div>
-      `;
-    }
+      // Contagem por status
+      const statusCounts = {};
+      posts.forEach(p => {
+        const s = p.status || 'ideia';
+        statusCounts[s] = (statusCounts[s] || 0) + 1;
+      });
 
-    card.innerHTML = `
-      <div class="month-card-header">
-        <h3>${MESES[m - 1]}</h3>
-        <span class="month-count">${total} posts</span>
-      </div>
-      ${total === 0 ? '<div style="color:var(--text-muted);font-size:13px;padding:8px 0;">Nenhum conteúdo</div>' : progressHtml}
-    `;
-    grid.appendChild(card);
+      const card = document.createElement('div');
+      card.className = 'month-card';
+      card.onclick = () => router.navigate(`/cliente/${slug}/mes/${m}`);
+
+      // Barra de progresso
+      let progressHtml = '';
+      if (total > 0) {
+        const segments = Object.entries(STATUS_CONFIG).map(([status, cfg]) => {
+          const count = statusCounts[status] || 0;
+          if (count === 0) return '';
+          const pct = (count / total * 100).toFixed(1);
+          return `<div class="progress-segment" style="width:${pct}%;background:${cfg.color}" title="${cfg.label}: ${count}"></div>`;
+        }).join('');
+        
+        progressHtml = `
+          <div class="progress-bar">${segments}</div>
+          <div class="progress-legend">
+            ${Object.entries(statusCounts).map(([s, c]) => {
+              const cfg = STATUS_CONFIG[s] || STATUS_CONFIG.ideia;
+              return `<span class="progress-legend-item"><span class="progress-legend-dot" style="background:${cfg.color}"></span>${c}</span>`;
+            }).join('')}
+          </div>
+        `;
+      }
+
+      card.innerHTML = `
+        <div class="month-card-header">
+          <h3>${MESES[m - 1]}</h3>
+          <span class="month-count">${total} posts</span>
+        </div>
+        ${total === 0 ? '<div style="color:var(--text-muted);font-size:13px;padding:8px 0;">Nenhum conteúdo</div>' : progressHtml}
+      `;
+      grid.appendChild(card);
+    }
+  }
+  
+  // Inicializar workflow se necessário
+  if (state.abAtivaVisaoAnual === 'workflow') {
+    await renderWorkflow();
   }
 }
 
@@ -847,4 +870,362 @@ function escapeHtml(str) {
 function escapeAttr(str) {
   if (!str) return '';
   return str.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// ============================================
+// VISÃO ANUAL - CONTROLE DE ABAS
+// ============================================
+
+function switchVisaoAnualTab(tab) {
+  state.abAtivaVisaoAnual = tab;
+  
+  // Atualiza botões
+  document.querySelectorAll('.month-tab').forEach(btn => {
+    btn.classList.remove('active');
+  });
+  event.target.classList.add('active');
+  
+  // Atualiza conteúdo
+  document.getElementById('tab-visao-anual').style.display = tab === 'anual' ? 'block' : 'none';
+  document.getElementById('tab-workflow').style.display = tab === 'workflow' ? 'block' : 'none';
+  
+  // Carrega workflow se necessário
+  if (tab === 'workflow') {
+    renderWorkflow();
+  }
+}
+
+// ============================================
+// WORKFLOW KANBAN
+// ============================================
+
+async function renderWorkflow() {
+  const container = document.getElementById('workflow-container');
+  if (!container || !state.empresaAtual) return;
+  
+  container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  
+  // Buscar dados do kanban
+  state.kanbanData = await getConteudosByStatus(state.empresaAtual.id);
+  
+  container.innerHTML = `
+    <div class="workflow-filters">
+      <select id="filtro-mes" onchange="aplicarFiltros()">
+        <option value="todos">Todos os meses</option>
+        ${MESES.map((mes, i) => `<option value="${i+1}" ${state.filtroMes == (i+1) ? 'selected' : ''}>${mes}</option>`).join('')}
+      </select>
+      <select id="filtro-status" onchange="aplicarFiltros()">
+        <option value="todos">Todos os status</option>
+        ${KANBAN_CONFIG.map(cfg => `<option value="${cfg.key}" ${state.filtroStatus === cfg.key ? 'selected' : ''}>${cfg.emoji} ${cfg.label}</option>`).join('')}
+      </select>
+      <button class="btn btn-primary" onclick="openAddDemandModal()">+ Adicionar demanda</button>
+    </div>
+    
+    <div class="kanban-board" id="kanban-board">
+      ${KANBAN_CONFIG.map(cfg => renderKanbanColumn(cfg)).join('')}
+    </div>
+  `;
+  
+  // Inicializar drag and drop
+  initializeDragAndDrop();
+}
+
+function renderKanbanColumn(columnConfig) {
+  const { key, emoji, label, color } = columnConfig;
+  const items = state.kanbanData[key] || [];
+  
+  // Aplicar filtros
+  const filteredItems = items.filter(item => {
+    if (state.filtroMes !== 'todos' && item.mes != state.filtroMes) return false;
+    if (state.filtroStatus !== 'todos' && item.status !== state.filtroStatus) return false;
+    return true;
+  });
+  
+  return `
+    <div class="kanban-column" data-status="${key}">
+      <div class="kanban-column-header">
+        <div class="kanban-column-title" style="color:${color}">
+          <span>${emoji}</span>
+          <span>${label}</span>
+        </div>
+        <div class="kanban-column-count">${filteredItems.length} item${filteredItems.length === 1 ? '' : 's'}</div>
+      </div>
+      <div class="kanban-column-body">
+        <div class="kanban-drop-zone" data-status="${key}">
+          ${filteredItems.map(item => renderKanbanCard(item)).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderKanbanCard(item) {
+  const tipoEmoji = TIPO_EMOJI[item.tipo] || '📄';
+  const inicial = state.empresaAtual.nome.charAt(0).toUpperCase();
+  const cores = state.empresaAtual.cores || {};
+  const primaria = cores.primaria || '#6366F1';
+  
+  // Primeira imagem se houver
+  const primeiraImagem = (item.midia_urls && item.midia_urls.length > 0) ? item.midia_urls[0] : null;
+  
+  return `
+    <div class="kanban-card" 
+         draggable="true" 
+         data-id="${item.id}" 
+         data-status="${item.status}"
+         oncontextmenu="showCardContextMenu(event, '${item.id}')">
+      
+      <div class="kanban-card-header">
+        <div style="flex:1;">
+          <div class="kanban-card-title">${escapeHtml(item.titulo || 'Sem título')}</div>
+          
+          <div class="kanban-card-meta">
+            <span class="kanban-card-badge" style="background:${primaria}">${inicial}</span>
+            <span class="kanban-card-tipo" title="${item.tipo || 'post'}">${tipoEmoji}</span>
+            ${item.data_publicacao ? `<span class="kanban-card-date">${formatDate(item.data_publicacao)}</span>` : ''}
+          </div>
+        </div>
+        
+        <div class="kanban-card-actions">
+          <button class="kanban-card-action" onclick="openPostDetail('${item.id}')" title="Ver detalhes">👁️</button>
+          <button class="kanban-card-action delete" onclick="confirmarExclusao('${item.id}')" title="Excluir">🗑️</button>
+        </div>
+      </div>
+      
+      ${primeiraImagem ? `
+        <div class="kanban-card-preview">
+          <img src="${primeiraImagem}" alt="Preview" onerror="this.parentElement.style.display='none'">
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+function aplicarFiltros() {
+  state.filtroMes = document.getElementById('filtro-mes').value;
+  state.filtroStatus = document.getElementById('filtro-status').value;
+  renderWorkflow();
+}
+
+// ============================================
+// DRAG AND DROP
+// ============================================
+
+function initializeDragAndDrop() {
+  const cards = document.querySelectorAll('.kanban-card');
+  const dropZones = document.querySelectorAll('.kanban-drop-zone');
+  
+  // Event listeners para cards
+  cards.forEach(card => {
+    card.addEventListener('dragstart', handleDragStart);
+    card.addEventListener('dragend', handleDragEnd);
+  });
+  
+  // Event listeners para drop zones
+  dropZones.forEach(zone => {
+    zone.addEventListener('dragover', handleDragOver);
+    zone.addEventListener('dragenter', handleDragEnter);
+    zone.addEventListener('dragleave', handleDragLeave);
+    zone.addEventListener('drop', handleDrop);
+  });
+}
+
+let draggedElement = null;
+let placeholder = null;
+
+function handleDragStart(e) {
+  draggedElement = this;
+  this.classList.add('dragging');
+  
+  // Criar placeholder
+  placeholder = document.createElement('div');
+  placeholder.className = 'kanban-placeholder';
+  placeholder.innerHTML = 'Solte aqui';
+  
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/html', this.outerHTML);
+}
+
+function handleDragEnd(e) {
+  this.classList.remove('dragging');
+  
+  // Remover placeholder
+  if (placeholder && placeholder.parentNode) {
+    placeholder.parentNode.removeChild(placeholder);
+  }
+  
+  draggedElement = null;
+  placeholder = null;
+}
+
+function handleDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  
+  if (!draggedElement) return;
+  
+  const afterElement = getDragAfterElement(this, e.clientY);
+  
+  if (afterElement == null) {
+    this.appendChild(placeholder);
+  } else {
+    this.insertBefore(placeholder, afterElement);
+  }
+  
+  placeholder.classList.add('visible');
+}
+
+function handleDragEnter(e) {
+  e.preventDefault();
+  this.classList.add('drag-over');
+}
+
+function handleDragLeave(e) {
+  // Só remove se realmente saiu da zona
+  if (!this.contains(e.relatedTarget)) {
+    this.classList.remove('drag-over');
+    if (placeholder && placeholder.parentNode === this) {
+      placeholder.classList.remove('visible');
+    }
+  }
+}
+
+async function handleDrop(e) {
+  e.preventDefault();
+  this.classList.remove('drag-over');
+  
+  if (!draggedElement) return;
+  
+  const newStatus = this.dataset.status;
+  const cardId = draggedElement.dataset.id;
+  const oldStatus = draggedElement.dataset.status;
+  
+  if (newStatus !== oldStatus) {
+    // Atualizar no banco
+    const result = await updateConteudoStatus(cardId, newStatus);
+    if (result) {
+      // Atualizar estado local
+      const item = findItemInKanbanData(cardId);
+      if (item) {
+        // Remove do status antigo
+        state.kanbanData[oldStatus] = state.kanbanData[oldStatus].filter(i => i.id !== cardId);
+        // Adiciona no novo status
+        item.status = newStatus;
+        if (!state.kanbanData[newStatus]) state.kanbanData[newStatus] = [];
+        state.kanbanData[newStatus].push(item);
+        
+        // Re-renderizar
+        renderWorkflow();
+      }
+    }
+  }
+}
+
+function getDragAfterElement(container, y) {
+  const draggableElements = [...container.querySelectorAll('.kanban-card:not(.dragging)')];
+  
+  return draggableElements.reduce((closest, child) => {
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    
+    if (offset < 0 && offset > closest.offset) {
+      return { offset: offset, element: child };
+    } else {
+      return closest;
+    }
+  }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+
+function findItemInKanbanData(id) {
+  for (const status in state.kanbanData) {
+    const item = state.kanbanData[status].find(i => i.id === id);
+    if (item) return item;
+  }
+  return null;
+}
+
+// ============================================
+// MODAL ADICIONAR DEMANDA
+// ============================================
+
+function openAddDemandModal() {
+  if (!state.empresaAtual) return;
+  
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay add-demand-modal';
+  overlay.id = 'add-demand-modal';
+  overlay.onclick = (e) => { if (e.target === overlay) closeModal(); };
+
+  const hoje = new Date().toISOString().split('T')[0];
+  const mesAtual = new Date().getMonth() + 1;
+  const anoAtual = new Date().getFullYear();
+
+  overlay.innerHTML = `
+    <div class="modal">
+      <div class="modal-header">
+        <h2>➕ Adicionar Demanda Rápida</h2>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body" style="padding-top:16px">
+        <form id="form-add-demand" onsubmit="salvarDemandaRapida(event)">
+          <div class="form-group">
+            <label>Título *</label>
+            <input type="text" class="form-control" name="titulo" required placeholder="Ex: Post sobre produtividade">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Tipo</label>
+              <select class="form-control" name="tipo">
+                ${TIPOS.map(t => `<option value="${t}">${TIPO_EMOJI[t] || '📄'} ${t}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Data de Publicação</label>
+              <input type="date" class="form-control" name="data_publicacao" value="${hoje}">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Descrição (opcional)</label>
+            <textarea class="form-control" name="descricao" placeholder="Descreva a demanda..." rows="3"></textarea>
+          </div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+            <button type="button" class="btn" onclick="closeModal()">Cancelar</button>
+            <button type="submit" class="btn btn-primary">💾 Criar Demanda</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('active'));
+  overlay.querySelector('input[name="titulo"]').focus();
+}
+
+async function salvarDemandaRapida(event) {
+  event.preventDefault();
+  const form = event.target;
+  const formData = new FormData(form);
+
+  if (!state.empresaAtual) return;
+
+  const dados = {
+    empresaId: state.empresaAtual.id,
+    titulo: formData.get('titulo'),
+    tipo: formData.get('tipo'),
+    descricao: formData.get('descricao') || null,
+    dataPublicacao: formData.get('data_publicacao') || null,
+    mes: state.filtroMes !== 'todos' ? parseInt(state.filtroMes) : new Date().getMonth() + 1,
+    ano: state.anoAtual,
+    ordem: 999
+  };
+
+  const result = await createConteudoRapido(dados);
+  if (result) {
+    closeModal();
+    // Atualizar kanban
+    if (!state.kanbanData.rascunho) state.kanbanData.rascunho = [];
+    state.kanbanData.rascunho.push(result);
+    renderWorkflow();
+  }
 }
